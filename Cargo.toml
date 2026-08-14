@@ -1,0 +1,31 @@
+[package]
+name = "fleet-audio"
+version = "0.1.0"
+edition = "2024"
+description = "Streaming MIDI → audio renderer with O(1) memory. Replaces the numpy OOM killer."
+license = "MIT"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+midly = "0.5"
+hound = "3"
+dasp = { version = "0.11", features = ["signal", "envelope"] }
+crossbeam = "0.8"
+crossbeam-queue = "0.3"
+anyhow = "1"
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+axum = "0.8"
+
+[dev-dependencies]
+approx = "0.5"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
