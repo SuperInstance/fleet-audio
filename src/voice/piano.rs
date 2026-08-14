@@ -164,8 +164,8 @@ mod tests {
         loud.render(&mut buf_loud, 44100);
         quiet.render(&mut buf_quiet, 44100);
 
-        let peak_loud = buf_loud.iter().cloned().fold(0.0_f32, f32::abs);
-        let peak_quiet = buf_quiet.iter().cloned().fold(0.0_f32, f32::abs);
+        let peak_loud = buf_loud.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
+        let peak_quiet = buf_quiet.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
         assert!(
             peak_loud > peak_quiet,
             "Higher velocity should produce louder output"
@@ -179,13 +179,13 @@ mod tests {
 
         let mut buffer = [0.0_f32; 1024];
         voice.render(&mut buffer, 44100);
-        let peak_active = buffer.iter().cloned().fold(0.0_f32, f32::abs);
+        let peak_active = buffer.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
 
         voice.note_off();
         // Render enough samples for release to complete
         let mut buffer = [0.0_f32; 44100]; // 1 second
         voice.render(&mut buffer, 44100);
-        let peak_after = buffer[40000..].iter().cloned().fold(0.0_f32, f32::abs);
+        let peak_after = buffer[40000..].iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
 
         assert!(peak_active > 0.0);
         assert!(peak_after < 0.01, "Voice should be near-silent after release");

@@ -139,7 +139,7 @@ mod tests {
 
         let mut buffer = [0.0_f32; 512];
         voice.render(&mut buffer, 44100);
-        let peak = buffer.iter().cloned().fold(0.0_f32, f32::abs);
+        let peak = buffer.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
         assert!(peak > 0.0, "Guitar voice should produce sound");
     }
 
@@ -151,12 +151,12 @@ mod tests {
         // Early samples should be louder (pluck)
         let mut early = [0.0_f32; 1000];
         voice.render(&mut early, 44100);
-        let early_peak = early.iter().cloned().fold(0.0_f32, f32::abs);
+        let early_peak = early.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
 
         // Later samples should be quieter (decay)
         let mut late = vec![0.0_f32; 44100]; // 1 second
         voice.render(&mut late, 44100);
-        let late_peak = late[40000..].iter().cloned().fold(0.0_f32, f32::abs);
+        let late_peak = late[40000..].iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
 
         assert!(
             early_peak > late_peak,
@@ -176,8 +176,8 @@ mod tests {
         loud.render(&mut bl, 44100);
         quiet.render(&mut bq, 44100);
 
-        let pl = bl.iter().cloned().fold(0.0_f32, f32::abs);
-        let pq = bq.iter().cloned().fold(0.0_f32, f32::abs);
+        let pl = bl.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
+        let pq = bq.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
         assert!(pl > pq, "Higher velocity = louder pluck");
     }
 
@@ -189,7 +189,7 @@ mod tests {
 
         let mut buffer = vec![0.0_f32; 44100];
         voice.render(&mut buffer, 44100);
-        let tail = buffer[40000..].iter().cloned().fold(0.0_f32, f32::abs);
+        let tail = buffer[40000..].iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
         assert!(tail < 0.01, "Should be silent after release");
         assert!(!voice.is_active());
     }

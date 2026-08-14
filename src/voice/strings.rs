@@ -124,7 +124,7 @@ mod tests {
 
         let mut buffer = [0.0_f32; 1024];
         voice.render(&mut buffer, 44100);
-        let peak = buffer.iter().cloned().fold(0.0_f32, f32::abs);
+        let peak = buffer.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
         assert!(peak > 0.0, "String voice should produce sound");
     }
 
@@ -135,11 +135,11 @@ mod tests {
 
         let mut early = [0.0_f32; 100];
         voice.render(&mut early, 44100);
-        let early_peak = early.iter().cloned().fold(0.0_f32, f32::abs);
+        let early_peak = early.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
 
         let mut later = [0.0_f32; 10000];
         voice.render(&mut later, 44100);
-        let later_peak = later.iter().cloned().fold(0.0_f32, f32::abs);
+        let later_peak = later.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
 
         // Slow attack: later should be louder than early
         assert!(
@@ -160,7 +160,7 @@ mod tests {
         voice.note_off();
         let mut release = vec![0.0_f32; 44100]; // 1s
         voice.render(&mut release, 44100);
-        let tail = release[40000..].iter().cloned().fold(0.0_f32, f32::abs);
+        let tail = release[40000..].iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
         assert!(tail < 0.01);
         assert!(!voice.is_active());
     }

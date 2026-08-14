@@ -236,7 +236,7 @@ mod tests {
 
         let mut buffer = [0.0_f32; 512];
         voice.render(&mut buffer, 44100);
-        let peak = buffer.iter().cloned().fold(0.0_f32, f32::abs);
+        let peak = buffer.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
         assert!(peak > 0.0, "Kick drum should produce sound");
     }
 
@@ -248,7 +248,7 @@ mod tests {
 
         let mut buffer = [0.0_f32; 512];
         voice.render(&mut buffer, 44100);
-        let peak = buffer.iter().cloned().fold(0.0_f32, f32::abs);
+        let peak = buffer.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
         assert!(peak > 0.0, "Snare should produce sound");
     }
 
@@ -259,12 +259,12 @@ mod tests {
 
         let mut early = [0.0_f32; 500]; // ~11ms
         voice.render(&mut early, 44100);
-        let early_peak = early.iter().cloned().fold(0.0_f32, f32::abs);
+        let early_peak = early.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
 
         // After 200ms, should be silent
         let mut late = vec![0.0_f32; 8820]; // 200ms
         voice.render(&mut late, 44100);
-        let late_peak = late.iter().cloned().fold(0.0_f32, f32::abs);
+        let late_peak = late.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
 
         assert!(early_peak > 0.0, "Hi-hat should produce initial sound");
         assert!(late_peak < 0.01, "Hi-hat should decay quickly");
@@ -283,8 +283,8 @@ mod tests {
         loud.render(&mut bl, 44100);
         quiet.render(&mut bq, 44100);
 
-        let pl = bl.iter().cloned().fold(0.0_f32, f32::abs);
-        let pq = bq.iter().cloned().fold(0.0_f32, f32::abs);
+        let pl = bl.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
+        let pq = bq.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
         assert!(pl > pq, "Higher velocity = louder drum");
     }
 
@@ -299,11 +299,11 @@ mod tests {
         // After ~100ms (4410 samples)
         let mut buf = vec![0.0_f32; 4410];
         crash.render(&mut buf, 44100);
-        let crash_level = buf.iter().cloned().fold(0.0_f32, f32::abs);
+        let crash_level = buf.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
 
         let mut buf = vec![0.0_f32; 4410];
         hat.render(&mut buf, 44100);
-        let hat_level = buf.iter().cloned().fold(0.0_f32, f32::abs);
+        let hat_level = buf.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
 
         // By this point, hi-hat should be near zero but crash should still have energy
         // (or at least crash should have more energy than hat)

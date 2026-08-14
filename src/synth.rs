@@ -218,7 +218,7 @@ mod tests {
         let mut synth = Synthesizer::with_defaults();
 
         let output = synth.process_chunk(&ring);
-        let peak = output.iter().cloned().fold(0.0_f32, f32::abs);
+        let peak = output.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
         assert_eq!(peak, 0.0, "No events → silence");
     }
 
@@ -230,7 +230,7 @@ mod tests {
         ring.push(MidiEvent::note_on(0, 69, 100, 0)); // A4 on piano channel
 
         let output = synth.process_chunk(&ring);
-        let peak = output.iter().cloned().fold(0.0_f32, f32::abs);
+        let peak = output.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
         assert!(peak > 0.0, "Note on should produce sound");
 
         assert!(synth.active_voice_count() > 0);
@@ -267,10 +267,11 @@ mod tests {
         ring.push(MidiEvent::note_on(0, 64, 80, 0)); // E
         ring.push(MidiEvent::note_on(0, 67, 80, 0)); // G
 
-        let output = synth.process_chunk(&ring);
-        let peak = output.iter().cloned().fold(0.0_f32, f32::abs);
+        let output: Vec<f32> = synth.process_chunk(&ring).to_vec();
+        let voice_count = synth.active_voice_count();
+        let peak = output.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
 
-        assert!(synth.active_voice_count() >= 3, "Should have 3 active voices");
+        assert!(voice_count >= 3, "Should have 3 active voices");
         assert!(peak > 0.0, "Should produce sound");
     }
 
@@ -283,11 +284,12 @@ mod tests {
         ring.push(MidiEvent::note_on(0, 69, 100, 0));
         ring.push(MidiEvent::note_on(1, 36, 100, 0)); // C2
 
-        let output = synth.process_chunk(&ring);
-        assert!(synth.active_voice_count() >= 2);
+        let output: Vec<f32> = synth.process_chunk(&ring).to_vec();
+        let voice_count = synth.active_voice_count();
 
         // Both should produce sound
-        let peak = output.iter().cloned().fold(0.0_f32, f32::abs);
+        let peak = output.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
+        assert!(voice_count >= 2);
         assert!(peak > 0.0);
     }
 
