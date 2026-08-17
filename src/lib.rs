@@ -16,6 +16,7 @@
 //! - Lock-free ring between MIDI input and synthesis
 
 pub mod config;
+pub mod feel;
 pub mod midi;
 pub mod ring;
 pub mod synth;
@@ -24,6 +25,7 @@ pub mod io;
 pub mod wav;
 
 pub use config::Config;
+pub use feel::{DialsReadings, FeltDirection, FeelPulse, Perception, RenderState};
 pub use midi::MidiEvent;
 pub use ring::EventRing;
 pub use synth::Synthesizer;

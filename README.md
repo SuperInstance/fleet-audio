@@ -2,7 +2,27 @@
 
 > Streaming MIDI → audio renderer with O(1) memory. Replaces the numpy OOM killer.
 
+<p align="center">
+  <img src="assets/images/feel-pulse.png" alt="The feel pulse — a soundboard in a dark room whose VU meters glow with a rising warm amber pulse" width="480">
+</p>
+
 **Phase 4** of the fleet infrastructure. Takes MIDI events from the CNS bus (JSONL spool or HTTP) and renders them to WAV in fixed-memory chunks. No allocation on the audio thread. No OOM. No O(duration) memory.
+
+## The Feel Pulse — the renderer plays with the room, not just in it
+
+The renderer gains an *ear*. [`FeelPulse`](src/feel.rs) (see [docs/feel-pulse.md](docs/feel-pulse.md)) listens to the audio stream's energy and shapes its own output by what it feels — a rising pulse pushes gain/velocity up, a falling pulse pulls them down, a flat pulse holds.
+
+```mermaid
+flowchart LR
+    A[Audio frames] --> B[Energy]
+    B --> C[FeelPulse<br/>rolling energy / loudness / tempo]
+    C --> D[Perception check<br/>direction / rate of change]
+    D --> E[shape_output<br/>rising ↑ falling ↓ flat →]
+    E --> F[Shaped output<br/>gain & velocity]
+    F -->|listen again| B
+```
+
+Ports the fleet's JEPA ear (`fleet-jepa-midi/vibe_matcher.py` LISTEN) and the elephant's perception-check math (`elephant/pulse.py`) into idiomatic Rust, and bridges the elephant's `volume`/`mood` dials as the pulse input.
 
 ## Architecture
 
@@ -62,7 +82,7 @@ http_port = 3007
 cargo test
 ```
 
-47 tests covering: ring buffer (push/pop/drain/wraparound), MIDI event handling, synthesizer polyphony, voice rendering (frequency correctness, envelope behavior, note-off silencing), WAV streaming, and memory boundedness.
+64 tests covering: ring buffer (push/pop/drain/wraparound), MIDI event handling, synthesizer polyphony, voice rendering (frequency correctness, envelope behavior, note-off silencing), WAV streaming, memory boundedness, and the feel pulse (rising/falling/flat shaping, NaN guard, dials bridge, tempo/onset detection).
 
 ## Design Decisions
 

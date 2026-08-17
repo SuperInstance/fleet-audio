@@ -17,6 +17,7 @@
 //! No allocation happens in `process_chunk`. Voice slots are pre-allocated.
 
 use crate::config::Config;
+use crate::feel::{FeelPulse, RenderState};
 use crate::midi::{MidiEvent, VoiceType};
 use crate::ring::EventRing;
 use crate::voice::{create_voice, Voice};
@@ -51,6 +52,10 @@ pub struct Synthesizer {
     current_time_us: u64,
     /// Microseconds per sample.
     us_per_sample: f64,
+    /// The feel pulse — the renderer's ear. When enabled, the renderer listens
+    /// to its own output energy and shapes the master gain by what it feels
+    /// (rising ↑, falling ↓, flat →). None = fixed master gain.
+    feel: Option<FeelPulse>,
 }
 
 impl Synthesizer {
@@ -71,6 +76,7 @@ impl Synthesizer {
             max_voices,
             current_time_us: 0,
             us_per_sample: 1_000_000.0 / config.sample_rate as f64,
+            feel: None,
         }
     }
 
@@ -123,9 +129,20 @@ impl Synthesizer {
             }
         }
 
-        // Apply master gain and soft clipping — O(chunk_size)
+        // Apply master gain and soft clipping — O(chunk_size).
+        //
+        // When the feel pulse is enabled, the renderer first listens to its
+        // own mixed energy, feeds it to the ear, and shapes the master gain by
+        // the felt direction — it plays WITH the room, not just in it.
+        let gain = if let Some(feel) = &mut self.feel {
+            let energy = rms(&self.mix_buffer).tanh();
+            feel.push(energy);
+            feel.shape_output(RenderState::new(self.master_gain, 1.0)).gain
+        } else {
+            self.master_gain
+        };
         for sample in &mut self.mix_buffer {
-            *sample *= self.master_gain;
+            *sample *= gain;
             // Soft clipping (tanh approximation)
             *sample = soft_clip(*sample);
         }
@@ -185,6 +202,25 @@ impl Synthesizer {
         0
     }
 
+    /// Enable the feel pulse — the renderer starts listening to its own
+    /// output and shaping the master gain by the felt direction.
+    pub fn enable_feel(&mut self, feel: FeelPulse) {
+        self.feel = Some(feel);
+    }
+
+    /// Mutable access to the feel pulse, if enabled.
+    pub fn feel_mut(&mut self) -> Option<&mut FeelPulse> {
+        self.feel.as_mut()
+    }
+
+    /// Feed an external energy frame (or dial reading) into the feel pulse.
+    /// No-op when the feel pulse is disabled.
+    pub fn feed_energy(&mut self, energy: f32) {
+        if let Some(feel) = &mut self.feel {
+            feel.push(energy);
+        }
+    }
+
     /// Get the number of currently active voices.
     pub fn active_voice_count(&self) -> usize {
         self.voices
@@ -197,6 +233,17 @@ impl Synthesizer {
     pub fn current_time_us(&self) -> u64 {
         self.current_time_us
     }
+}
+
+/// Root-mean-square energy of a sample buffer — the renderer's loudness for
+/// one chunk.
+#[inline]
+fn rms(buf: &[f32]) -> f32 {
+    if buf.is_empty() {
+        return 0.0;
+    }
+    let sum_sq: f32 = buf.iter().map(|s| s * s).sum();
+    (sum_sq / buf.len() as f32).sqrt()
 }
 
 /// Soft clipping using a tanh approximation.
@@ -324,5 +371,40 @@ mod tests {
                 "soft_clip({x}) = {clipped} should be within [-1.05, 1.05]"
             );
         }
+    }
+
+    #[test]
+    fn rms_matches_hand_computed() {
+        assert_eq!(rms(&[]), 0.0);
+        // RMS of [3, 4] = sqrt((9+16)/2) = sqrt(12.5) ≈ 3.5355
+        approx::assert_relative_eq!(rms(&[3.0, 4.0]), 3.5355, epsilon = 1e-3);
+        assert_eq!(rms(&[0.0, 0.0, 0.0]), 0.0);
+    }
+
+    #[test]
+    fn feel_enabled_still_renders() {
+        let ring = EventRing::new(64);
+        let mut synth = Synthesizer::with_defaults();
+        synth.enable_feel(FeelPulse::new());
+
+        // Silence with the ear enabled → still silence.
+        let output = synth.process_chunk(&ring);
+        let peak = output.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
+        assert_eq!(peak, 0.0, "feel enabled + no events → silence");
+
+        // A note with the ear enabled → still renders sound.
+        ring.push(MidiEvent::note_on(0, 69, 100, 0));
+        let output = synth.process_chunk(&ring);
+        let peak = output.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
+        assert!(peak > 0.0, "feel enabled + note on → sound");
+    }
+
+    #[test]
+    fn feel_disabled_is_fixed_gain() {
+        // Default synthesizer has no feel → fixed master gain, no ear.
+        let mut synth = Synthesizer::with_defaults();
+        assert!(synth.feel_mut().is_none());
+        synth.feed_energy(1.0); // no-op when disabled
+        assert!(synth.feel_mut().is_none());
     }
 }
