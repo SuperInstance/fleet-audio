@@ -46,6 +46,10 @@ struct Args {
     #[arg(long)]
     output: Option<String>,
 
+    /// Play live to the default output device (requires --features live)
+    #[arg(long, default_value_t = false)]
+    live: bool,
+
     /// Sample rate (default: 44100)
     #[arg(long, default_value = "44100")]
     sample_rate: u32,
@@ -146,6 +150,25 @@ async fn main() -> anyhow::Result<()> {
     } else {
         None
     };
+
+    // Open the live sink if requested (feature-gated). A headless box
+    // falls back to WAV-only with a warning — not fatal (plan §3.5).
+    #[cfg(feature = "live")]
+    let live_sink = if args.live {
+        match crate::io::cpal_out::LiveSink::open(args.sample_rate) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                tracing::warn!("live output unavailable ({e}); continuing WAV-only");
+                None
+            }
+        }
+    } else {
+        None
+    };
+    #[cfg(not(feature = "live"))]
+    if args.live {
+        anyhow::bail!("--live requires building with --features live");
+    }
 
     // Run the synthesis loop
     run_synth_loop(config, ring, wav_writer, dials_rx).await?;

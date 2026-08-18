@@ -29,3 +29,10 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 panic = "abort"
+
+[features]
+live = ["dep:cpal"]
+
+[dependencies.cpal]
+version = "0.15"
+optional = true
