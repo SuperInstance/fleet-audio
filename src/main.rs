@@ -155,7 +155,7 @@ async fn main() -> anyhow::Result<()> {
     // falls back to WAV-only with a warning — not fatal (plan §3.5).
     #[cfg(feature = "live")]
     let live_sink = if args.live {
-        match crate::io::cpal_out::LiveSink::open(args.sample_rate) {
+        match fleet_audio::io::cpal_out::LiveSink::open(args.sample_rate) {
             Ok(s) => Some(s),
             Err(e) => {
                 tracing::warn!("live output unavailable ({e}); continuing WAV-only");
