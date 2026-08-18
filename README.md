@@ -103,3 +103,51 @@ fleet-audio is the audio rendering backend for:
 ## License
 
 MIT
+
+## Build & run
+
+```bash
+cargo build --release
+# render from a JSONL event spool
+cargo run --release -- --input events.jsonl --output out.wav
+# watch the CNS bus spool instead (streams until stopped)
+cargo run --release -- --watch ~/.hermes/cns_spool/
+cargo test --release     # ring, feel-pulse, and synth unit tests
+```
+
+Check `--help` for the full flag list (chunk size, sample rate, input
+mode, HTTP listener port).
+
+## Source map
+
+```
+src/
+├── main.rs      # CLI entry, mode dispatch (file / watch / HTTP)
+├── config.rs    # runtime configuration + flag parsing
+├── ring.rs      # lock-free SPSC ring buffer (audio thread boundary)
+├── midi.rs      # MIDI event model + JSONL decoding
+├── synth.rs     # fixed-memory voice synthesizer
+├── voice/       # voice allocation and per-voice state
+├── io/          # WAV writer (streaming), spool/HTTP sources
+├── router/      # event routing from input to ring
+├── wav.rs       # RIFF/WAVE chunk writer
+└── feel.rs      # FeelPulse — energy tracking + perception checks
+```
+
+## Design rules (inherited from the critical-path rules)
+
+1. **O(chunk) memory, always.** The ring holds at most 1 second of audio;
+   the WAV writer flushes per chunk. Long pieces cost the same as short ones.
+2. **No allocation on the audio thread.** All allocation happens at setup;
+   the audio thread only reads the ring, runs voices, and writes chunks.
+3. **The spool lives on ext4** (`/home/...`), never `/mnt/c` — WSL filesystem
+   latency was murdering real-time playback.
+
+## Fleet context
+
+This replaced a numpy renderer that OOM-killed the box on pieces longer
+than a few minutes. The feel pulse (Aug 2026 maturation wave) is the
+audio-side port of the elephant's perception math: two numbers are a
+direction, three are a rate of change — the renderer hears its own output
+the way the room hears itself. Pairs with `fleet-jepa-midi` (the MIDI
+corpus and vibe matcher) and the elephant's `volume`/`mood` dials.
