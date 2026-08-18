@@ -22,10 +22,12 @@ use tracing_subscriber::EnvFilter;
 
 use fleet_audio::{
     config::{Config, SAMPLE_RATE},
+    feel::{DialsReadings, FeelPulse},
     midi::MidiEvent,
     ring::EventRing,
     synth::Synthesizer,
     wav::StreamingWavWriter,
+    io::dials_poller,
     io::jsonl_spool::JsonlSpoolReader,
 };
 
@@ -59,6 +61,11 @@ struct Args {
     /// Master gain 0.0–1.0 (default: 0.7)
     #[arg(long, default_value_t = 0.7)]
     gain: f32,
+
+    /// Elephant field endpoint to poll for dials readings, e.g.
+    /// http://127.0.0.1:4073/field — feeds FeelPulse live from the room.
+    #[arg(long)]
+    dials_endpoint: Option<String>,
 }
 
 #[tokio::main]
@@ -85,6 +92,7 @@ async fn main() -> anyhow::Result<()> {
         output_wav: args.output.clone(),
         jsonl_spool: args.spool.clone(),
         http_port: args.http_port,
+        dials_endpoint: args.dials_endpoint.clone(),
         ..Default::default()
     };
 
@@ -116,6 +124,22 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("HTTP MIDI server started on port {port}");
     }
 
+    // Spawn the dials endpoint poller if configured — the elephant's field
+    // feeds the render loop's FeelPulse live via a bounded channel.
+    let dials_rx = if let Some(url) = &args.dials_endpoint {
+        let (tx, rx) = crossbeam::channel::bounded::<DialsReadings>(16);
+        let url = url.clone();
+        tokio::spawn(dials_poller::run_dials_poller(
+            url.clone(),
+            tx,
+            dials_poller::DEFAULT_POLL_INTERVAL,
+        ));
+        tracing::info!("Dials endpoint poller started: {url}");
+        Some(rx)
+    } else {
+        None
+    };
+
     // Open WAV output if configured
     let wav_writer = if let Some(output_path) = &args.output {
         Some(StreamingWavWriter::create(output_path, args.sample_rate)?)
@@ -124,7 +148,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Run the synthesis loop
-    run_synth_loop(config, ring, wav_writer).await?;
+    run_synth_loop(config, ring, wav_writer, dials_rx).await?;
 
     Ok(())
 }
@@ -137,15 +161,30 @@ async fn run_synth_loop(
     config: Config,
     ring: Arc<EventRing>,
     mut wav_writer: Option<StreamingWavWriter>,
+    dials_rx: Option<crossbeam::channel::Receiver<DialsReadings>>,
 ) -> anyhow::Result<()> {
     let mut synth = Synthesizer::new(&config);
     let chunk_us = (config.chunk_size as f64 / config.sample_rate as f64 * 1_000_000.0) as u64;
+
+    // Dials endpoint configured → the renderer starts listening to the room.
+    if dials_rx.is_some() {
+        synth.enable_feel(FeelPulse::new());
+    }
 
     tracing::info!("Synthesis loop started (chunk_us={chunk_us})");
 
     // For production: this loop runs forever.
     // For testing / finite runs: we'd add a shutdown signal.
     loop {
+        // Drain any dials readings that arrived since the last chunk — O(1),
+        // no allocation. The poller runs off-thread; this loop only ever
+        // does a non-blocking try_recv.
+        if let Some(rx) = &dials_rx {
+            while let Ok(readings) = rx.try_recv() {
+                synth.feed_dials(readings);
+            }
+        }
+
         // Process one chunk
         let output = synth.process_chunk(&ring);
 

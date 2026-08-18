@@ -45,6 +45,10 @@ pub struct Config {
     pub jsonl_spool: Option<String>,
     /// HTTP port for MIDI input (CNS bus). If None, no HTTP input.
     pub http_port: Option<u16>,
+    /// Elephant field endpoint to poll for dials readings (e.g.
+    /// `http://127.0.0.1:4073/field`). If None, the feel pulse is not fed
+    /// live — see `io::dials_poller`.
+    pub dials_endpoint: Option<String>,
 }
 
 impl Default for Config {
@@ -58,6 +62,7 @@ impl Default for Config {
             output_wav: None,
             jsonl_spool: None,
             http_port: None,
+            dials_endpoint: None,
         }
     }
 }

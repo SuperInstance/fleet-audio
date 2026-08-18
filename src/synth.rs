@@ -221,6 +221,14 @@ impl Synthesizer {
         }
     }
 
+    /// Feed an elephant dial reading (from `--dials-endpoint`) into the feel
+    /// pulse. No-op when the feel pulse is disabled.
+    pub fn feed_dials(&mut self, readings: crate::feel::DialsReadings) {
+        if let Some(feel) = &mut self.feel {
+            feel.push_dials(readings);
+        }
+    }
+
     /// Get the number of currently active voices.
     pub fn active_voice_count(&self) -> usize {
         self.voices
@@ -397,6 +405,31 @@ mod tests {
         let output = synth.process_chunk(&ring);
         let peak = output.iter().cloned().fold(0.0_f32, |acc, x| acc.max(x.abs()));
         assert!(peak > 0.0, "feel enabled + note on → sound");
+    }
+
+    #[test]
+    fn feed_dials_shapes_gain_when_feel_enabled() {
+        let mut synth = Synthesizer::with_defaults();
+        synth.enable_feel(FeelPulse::new());
+
+        synth.feed_dials(crate::feel::DialsReadings::new(0.3, 0.0));
+        synth.feed_dials(crate::feel::DialsReadings::new(0.6, 0.0));
+        synth.feed_dials(crate::feel::DialsReadings::new(0.9, 0.0));
+
+        let feel = synth.feel_mut().unwrap();
+        assert_eq!(feel.felt(), crate::feel::FeltDirection::Rising);
+        assert!(
+            feel.gain_multiplier() > 1.0,
+            "rising dials should push the render gain up"
+        );
+    }
+
+    #[test]
+    fn feed_dials_is_noop_when_feel_disabled() {
+        let mut synth = Synthesizer::with_defaults();
+        assert!(synth.feel_mut().is_none());
+        synth.feed_dials(crate::feel::DialsReadings::new(0.9, 0.5));
+        assert!(synth.feel_mut().is_none());
     }
 
     #[test]
